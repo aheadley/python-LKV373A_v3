@@ -3,6 +3,8 @@
 
 import functools
 import urlparse
+import socket
+import contextlib
 
 import requests
 
@@ -128,6 +130,41 @@ class LKV373A_v3(object):
     def wifi(self, response):
         return response.ok
 
+class Transcoder(object):
+    FFMPEG_ARGS = \
+        '-strict            -2 ' \
+        '-threads           0 ' \
+        '-i                 udp://{ip_addr}:{port}?fifo_size={buffer_size}?overrun_nonfatal=1 ' \
+        '-vf                scale={frame_w}:{frame_h} ' \
+        '-vcodec            libx264 ' \
+        '-g                 {framerate} ' \
+        '-keyint_min        {keyframerate} ' \
+        '-crf               {crf} ' \
+        '-preset            {x264preset} ' \
+        '-b:v               {video_bitrate}k ' \
+        '-maxrate           {video_bitrate}k ' \
+        '-pix_fmt           yuv420p ' \
+        '-codec:a           aac ' \
+        '-b:a               {audio_bitrate}k ' \
+        '-ar                44100 ' \
+        '-ac                2 ' \
+        '-f                 flv ' \
+        '{ingest_url}'
+
+    TWITCH_INGEST_URL       = 'rtmp://{ingest_server}.twitch.tv/app/{stream_key}'
+    YOUTUBE_INGEST_URL      = 'rtmp://a.rtmp.youtube.com/live2/{stream_key}'
+
+    def __init__(self):
+        pass
+
+    def start_stream(self):
+        pass
+
+def get_listen_ip(dest_ip):
+    with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as s:
+        s.connect((dest_ip, 80))
+        return s.getsockname()[0]
+
 if __name__ == '__main__':
     import sys
     import optparse
@@ -141,5 +178,11 @@ if __name__ == '__main__':
         sys.exit(1)
 
     dev_ip_addr = args[0]
+    local_ip_addr = get_listen_ip(dev_ip_addr)
 
-    obj = LKV373A_v3(dev_ip_addr)
+    dev = LKV373A_v3(dev_ip_addr)
+    tx = Transcoder()
+
+    dev.streaminfo(udp='y', rtp='n', multicast='n', unicast='y'
+        mcastaddr=local_ip_addr, port=dev.DEFAULTS['BROADCAST_PORT'])
+    tx.start_stream()
